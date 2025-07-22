@@ -1,7 +1,7 @@
 "use client"
 
-import { LandingPage } from "@/components/landing-page"
+import { MockApiPlatform } from "@/components/mock-api-platform"
 
 export default function Home() {
-  return <LandingPage />
+  return <MockApiPlatform />
 }
