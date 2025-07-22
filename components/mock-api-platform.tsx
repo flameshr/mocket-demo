@@ -1,156 +1,59 @@
-"use client"
+import type React from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
-import { useState } from "react"
-import { AppSidebar } from "@/components/app-sidebar"
-import { MainContent } from "@/components/main-content"
-
-export interface MockEndpoint {
-  id: string
-  name: string
-  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
-  path: string
-  description?: string
-  response: {
-    status: number
-    headers: Record<string, string>
-    body: string
-  }
-  request?: {
-    headers?: Record<string, string>
-    body?: string
-  }
+interface MockApiPlatformProps {
+  title: string
+  description: string
+  endpoints: {
+    path: string
+    method: string
+    description: string
+    response: string
+  }[]
 }
 
-export interface Collection {
-  id: string
-  name: string
-  endpoints: MockEndpoint[]
-}
-
-export function MockApiPlatform() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [collections, setCollections] = useState<Collection[]>([
-    {
-      id: "1",
-      name: "User API",
-      endpoints: [
-        {
-          id: "1",
-          name: "Get Users",
-          method: "GET",
-          path: "/api/users",
-          description: "Retrieve all users",
-          response: {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(
-              [
-                { id: 1, name: "John Doe", email: "john@example.com" },
-                { id: 2, name: "Jane Smith", email: "jane@example.com" },
-              ],
-              null,
-              2,
-            ),
-          },
-        },
-        {
-          id: "2",
-          name: "Create User",
-          method: "POST",
-          path: "/api/users",
-          description: "Create a new user",
-          response: {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: 3, name: "New User", email: "new@example.com" }, null, 2),
-          },
-          request: {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: "New User", email: "new@example.com" }, null, 2),
-          },
-        },
-      ],
-    },
-    {
-      id: "2",
-      name: "Product API",
-      endpoints: [
-        {
-          id: "3",
-          name: "Get Products",
-          method: "GET",
-          path: "/api/products",
-          description: "Retrieve all products",
-          response: {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(
-              [
-                { id: 1, name: "Laptop", price: 999.99 },
-                { id: 2, name: "Phone", price: 599.99 },
-              ],
-              null,
-              2,
-            ),
-          },
-        },
-      ],
-    },
-  ])
-
-  const [selectedCollection, setSelectedCollection] = useState<Collection>(collections[0])
-  const [selectedEndpoint, setSelectedEndpoint] = useState<MockEndpoint | null>(collections[0].endpoints[0])
-
-  const updateEndpoint = (updatedEndpoint: MockEndpoint) => {
-    setCollections((prev) =>
-      prev.map((collection) =>
-        collection.id === selectedCollection.id
-          ? {
-              ...collection,
-              endpoints: collection.endpoints.map((endpoint) =>
-                endpoint.id === updatedEndpoint.id ? updatedEndpoint : endpoint,
-              ),
-            }
-          : collection,
-      ),
-    )
-    setSelectedEndpoint(updatedEndpoint)
-  }
-
-  const addEndpoint = (collectionId: string, endpoint: MockEndpoint) => {
-    setCollections((prev) =>
-      prev.map((collection) =>
-        collection.id === collectionId ? { ...collection, endpoints: [...collection.endpoints, endpoint] } : collection,
-      ),
-    )
-  }
-
-  const addCollection = (collection: Collection) => {
-    setCollections((prev) => [...prev, collection])
-  }
-
+const MockApiPlatform: React.FC<MockApiPlatformProps> = ({ title, description, endpoints }) => {
   return (
-    <div className="h-screen w-full flex overflow-hidden bg-background">
-      <AppSidebar
-        collections={collections}
-        selectedCollection={selectedCollection}
-        selectedEndpoint={selectedEndpoint}
-        onSelectCollection={setSelectedCollection}
-        onSelectEndpoint={setSelectedEndpoint}
-        onAddEndpoint={addEndpoint}
-        onAddCollection={addCollection}
-        isOpen={sidebarOpen}
-        onToggle={() => setSidebarOpen(!sidebarOpen)}
-      />
-      <div className={`flex-1 transition-all duration-300 ${sidebarOpen ? "ml-0" : "ml-0"}`}>
-        <MainContent
-          selectedEndpoint={selectedEndpoint}
-          selectedCollection={selectedCollection}
-          onUpdateEndpoint={updateEndpoint}
-          onAddEndpoint={addEndpoint}
-          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        />
-      </div>
+    <div className="w-full h-full flex flex-col">
+      <header className="flex items-center justify-between p-4 border-b">
+        <div>
+          <h1 className="text-2xl font-bold">{title}</h1>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+        <div className="flex items-center space-x-4">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+              ← Back to Home
+            </Button>
+          </Link>
+          <ThemeToggle />
+        </div>
+      </header>
+      <ScrollArea className="flex-1 p-4">
+        <div className="grid gap-4">
+          {endpoints.map((endpoint, index) => (
+            <Card key={index}>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <span>{endpoint.path}</span>
+                  <Badge variant="secondary">{endpoint.method}</Badge>
+                </CardTitle>
+                <CardDescription>{endpoint.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <pre className="whitespace-pre-wrap">{endpoint.response}</pre>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </ScrollArea>
     </div>
   )
 }
+
+export default MockApiPlatform
