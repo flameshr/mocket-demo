@@ -1,390 +1,356 @@
 "use client"
 
 import { useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Play, Save, Copy, Menu } from "lucide-react"
-import type { MockEndpoint, Collection } from "./mock-api-platform"
-import { AiMockGenerator } from "./ai-mock-generator"
-import { ThemeToggle } from "./theme-toggle"
+import { Badge } from "@/components/ui/badge"
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
+import { ValidationEditor } from "@/components/validation-editor"
+import { ResponseEditor } from "@/components/response-editor"
+import { AiMockGenerator } from "@/components/ai-mock-generator"
+import { Settings, Code, Wand2, Play, Save, Trash2 } from "lucide-react"
+import type { Collection, Endpoint } from "@/lib/api-service"
+import { toast } from "sonner"
 
 interface MainContentProps {
-  selectedEndpoint: MockEndpoint | null
-  selectedCollection: Collection
-  onUpdateEndpoint: (endpoint: MockEndpoint) => void
-  onAddEndpoint: (collectionId: string, endpoint: MockEndpoint) => void
-  onToggleSidebar: () => void
+  selectedCollection: Collection | null
+  selectedEndpoint: Endpoint | null
+  onEndpointCreate: (endpoint: Omit<Endpoint, "id" | "created_at" | "updated_at">) => Promise<void>
+  onEndpointUpdate: (id: string, updates: Partial<Endpoint>) => Promise<void>
+  onEndpointDelete: (id: string) => Promise<void>
 }
 
 export function MainContent({
-  selectedEndpoint,
   selectedCollection,
-  onUpdateEndpoint,
-  onAddEndpoint,
-  onToggleSidebar,
+  selectedEndpoint,
+  onEndpointCreate,
+  onEndpointUpdate,
+  onEndpointDelete,
 }: MainContentProps) {
-  const [testResponse, setTestResponse] = useState<string>("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [endpointForm, setEndpointForm] = useState({
+    name: "",
+    method: "GET",
+    path: "",
+    response_body: "{}",
+    status_code: 200,
+    headers: {},
+    validation_rules: [],
+    error_scenarios: [],
+    delay_config: { enabled: false, min: 100, max: 1000 },
+  })
+  const [saving, setSaving] = useState(false)
 
-  if (!selectedEndpoint) {
-    return (
-      <div className="flex flex-col h-full">
-        <header className="flex h-16 shrink-0 items-center gap-4 px-6 border-b border-border/50 dark:border-gray-800/50 bg-gradient-to-r from-background to-muted/20">
-          <Button variant="ghost" size="sm" onClick={onToggleSidebar}>
-            <Menu className="h-4 w-4" />
-          </Button>
-          <h1 className="text-lg font-semibold">MockAPI Platform</h1>
-          <div className="ml-auto">
-            <ThemeToggle />
-          </div>
-        </header>
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center max-w-2xl">
-            <div className="mb-6">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                <Play className="h-8 w-8 text-white" />
-              </div>
-              <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Welcome to MockAPI
-              </h2>
-              <p className="text-muted-foreground text-lg">
-                Select an endpoint from the sidebar to start editing, or create a new one with AI.
-              </p>
-            </div>
-            <AiMockGenerator
-              onGenerateEndpoint={(endpoint) => onAddEndpoint(selectedCollection.id, endpoint)}
-              collectionId={selectedCollection.id}
-            />
-          </div>
-        </div>
-      </div>
-    )
+  // Update form when selected endpoint changes
+  useState(() => {
+    if (selectedEndpoint) {
+      setEndpointForm({
+        name: selectedEndpoint.name,
+        method: selectedEndpoint.method,
+        path: selectedEndpoint.path,
+        response_body: selectedEndpoint.response_body || "{}",
+        status_code: selectedEndpoint.status_code,
+        headers: selectedEndpoint.headers || {},
+        validation_rules: selectedEndpoint.validation_rules || [],
+        error_scenarios: selectedEndpoint.error_scenarios || [],
+        delay_config: selectedEndpoint.delay_config || { enabled: false, min: 100, max: 1000 },
+      })
+    } else {
+      setEndpointForm({
+        name: "",
+        method: "GET",
+        path: "",
+        response_body: "{}",
+        status_code: 200,
+        headers: {},
+        validation_rules: [],
+        error_scenarios: [],
+        delay_config: { enabled: false, min: 100, max: 1000 },
+      })
+    }
+  }, [selectedEndpoint])
+
+  const handleSave = async () => {
+    if (!selectedCollection) {
+      toast.error("Please select a collection first")
+      return
+    }
+
+    if (!endpointForm.name || !endpointForm.path) {
+      toast.error("Name and path are required")
+      return
+    }
+
+    setSaving(true)
+    try {
+      if (selectedEndpoint) {
+        // Update existing endpoint
+        await onEndpointUpdate(selectedEndpoint.id, {
+          ...endpointForm,
+          collection_id: selectedCollection.id,
+        })
+      } else {
+        // Create new endpoint
+        await onEndpointCreate({
+          ...endpointForm,
+          collection_id: selectedCollection.id,
+        })
+      }
+    } catch (error) {
+      console.error("Save failed:", error)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleTest = async () => {
-    setIsLoading(true)
-    setTimeout(() => {
-      setTestResponse(
-        JSON.stringify(
-          {
-            status: selectedEndpoint.response.status,
-            headers: selectedEndpoint.response.headers,
-            body: JSON.parse(selectedEndpoint.response.body),
-          },
-          null,
-          2,
-        ),
-      )
-      setIsLoading(false)
-    }, 1000)
+  const handleDelete = async () => {
+    if (!selectedEndpoint) return
+
+    if (confirm("Are you sure you want to delete this endpoint?")) {
+      try {
+        await onEndpointDelete(selectedEndpoint.id)
+      } catch (error) {
+        console.error("Delete failed:", error)
+      }
+    }
+  }
+
+  const handleTest = () => {
+    toast.info("Test functionality coming soon!")
   }
 
   const getMethodColor = (method: string) => {
     switch (method) {
       case "GET":
-        return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
       case "POST":
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30"
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
       case "PUT":
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30"
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
       case "DELETE":
-        return "bg-red-500/20 text-red-400 border-red-500/30"
+        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
       case "PATCH":
-        return "bg-purple-500/20 text-purple-400 border-purple-500/30"
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300"
       default:
-        return "bg-gray-500/20 text-gray-400 border-gray-500/30"
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300"
     }
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      <header className="flex h-16 shrink-0 items-center gap-4 px-6 border-b border-border/50 dark:border-gray-800/50 bg-gradient-to-r from-background to-muted/20">
-        <Button variant="ghost" size="sm" onClick={onToggleSidebar}>
-          <Menu className="h-4 w-4" />
-        </Button>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className={`font-mono ${getMethodColor(selectedEndpoint.method)}`}>
-            {selectedEndpoint.method}
-          </Badge>
-          <h1 className="text-lg font-semibold">{selectedEndpoint.name}</h1>
+  if (!selectedCollection) {
+    return (
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-2 px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbPage>MockAPI Platform</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+        </header>
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center">
+                <Code className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold">No Collection Selected</h3>
+              <p className="text-muted-foreground max-w-sm">
+                Select a collection from the sidebar to start creating and managing your mock API endpoints.
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            onClick={handleTest}
-            disabled={isLoading}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            {isLoading ? "Testing..." : "Test"}
+      </SidebarInset>
+    )
+  }
+
+  return (
+    <SidebarInset>
+      <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+        <div className="flex items-center gap-2 px-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="#">MockAPI Platform</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{selectedCollection.name}</BreadcrumbPage>
+              </BreadcrumbItem>
+              {selectedEndpoint && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{selectedEndpoint.name}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              )}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+        <div className="ml-auto px-4 flex items-center gap-2">
+          {selectedEndpoint && (
+            <Button size="sm" variant="outline" onClick={handleDelete}>
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete
+            </Button>
+          )}
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            <Save className="h-4 w-4 mr-1" />
+            {saving ? "Saving..." : selectedEndpoint ? "Update" : "Create"}
           </Button>
-          <Button variant="outline" className="border-border/50 dark:border-gray-700 bg-transparent">
-            <Save className="h-4 w-4 mr-2" />
-            Save
-          </Button>
-          <ThemeToggle />
         </div>
       </header>
 
-      <main className="flex-1 p-6 overflow-hidden">
-        <Tabs defaultValue="endpoint" className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-4 shrink-0 bg-muted/30 border border-border/50 dark:border-gray-800/50">
-            <TabsTrigger value="endpoint" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+      <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+        <Tabs defaultValue="endpoint" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="endpoint">
+              <Settings className="h-4 w-4 mr-2" />
               Endpoint
             </TabsTrigger>
-            <TabsTrigger value="response" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <TabsTrigger value="response">
+              <Code className="h-4 w-4 mr-2" />
               Response
             </TabsTrigger>
-            <TabsTrigger value="test" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              Test
+            <TabsTrigger value="validation">
+              <Settings className="h-4 w-4 mr-2" />
+              Validation
             </TabsTrigger>
-            <TabsTrigger
-              value="ai-generate"
-              className="data-[state=active]:bg-background data-[state=active]:shadow-sm"
-            >
+            <TabsTrigger value="ai-generate">
+              <Wand2 className="h-4 w-4 mr-2" />
               AI Generate
             </TabsTrigger>
           </TabsList>
 
-          <div className="flex-1 mt-6 overflow-hidden">
-            <TabsContent value="endpoint" className="h-full m-0 overflow-y-auto">
-              <div className="space-y-6">
-                <Card className="border-border/50 dark:border-gray-800/50">
-                  <CardHeader>
-                    <CardTitle>Endpoint Configuration</CardTitle>
-                    <CardDescription>Configure your mock endpoint settings</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Name</Label>
-                        <Input
-                          id="name"
-                          value={selectedEndpoint.name}
-                          onChange={(e) =>
-                            onUpdateEndpoint({
-                              ...selectedEndpoint,
-                              name: e.target.value,
-                            })
-                          }
-                          className="border-border/50 dark:border-gray-700"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="method">Method</Label>
-                        <Select
-                          value={selectedEndpoint.method}
-                          onValueChange={(value: any) =>
-                            onUpdateEndpoint({
-                              ...selectedEndpoint,
-                              method: value,
-                            })
-                          }
-                        >
-                          <SelectTrigger className="border-border/50 dark:border-gray-700">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="border-border/50 dark:border-gray-700">
-                            <SelectItem value="GET">GET</SelectItem>
-                            <SelectItem value="POST">POST</SelectItem>
-                            <SelectItem value="PUT">PUT</SelectItem>
-                            <SelectItem value="DELETE">DELETE</SelectItem>
-                            <SelectItem value="PATCH">PATCH</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="path">Path</Label>
-                      <Input
-                        id="path"
-                        value={selectedEndpoint.path}
-                        onChange={(e) =>
-                          onUpdateEndpoint({
-                            ...selectedEndpoint,
-                            path: e.target.value,
-                          })
-                        }
-                        className="border-border/50 dark:border-gray-700 font-mono"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
-                        value={selectedEndpoint.description || ""}
-                        onChange={(e) =>
-                          onUpdateEndpoint({
-                            ...selectedEndpoint,
-                            description: e.target.value,
-                          })
-                        }
-                        rows={3}
-                        className="border-border/50 dark:border-gray-700"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {selectedEndpoint.request && (
-                  <Card className="border-border/50 dark:border-gray-800/50">
-                    <CardHeader>
-                      <CardTitle>Request Configuration</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Request Body</Label>
-                        <Textarea
-                          value={selectedEndpoint.request.body || ""}
-                          onChange={(e) =>
-                            onUpdateEndpoint({
-                              ...selectedEndpoint,
-                              request: {
-                                ...selectedEndpoint.request,
-                                body: e.target.value,
-                              },
-                            })
-                          }
-                          className="font-mono text-sm border-border/50 dark:border-gray-700"
-                          rows={6}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="response" className="h-full m-0 overflow-y-auto">
-              <Card className="border-border/50 dark:border-gray-800/50">
-                <CardHeader>
-                  <CardTitle>Response Configuration</CardTitle>
-                  <CardDescription>Configure the mock response for this endpoint</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="status">Status Code</Label>
-                      <Input
-                        id="status"
-                        type="number"
-                        value={selectedEndpoint.response.status}
-                        onChange={(e) =>
-                          onUpdateEndpoint({
-                            ...selectedEndpoint,
-                            response: {
-                              ...selectedEndpoint.response,
-                              status: Number.parseInt(e.target.value),
-                            },
-                          })
-                        }
-                        className="border-border/50 dark:border-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Content Type</Label>
-                      <Input
-                        value={selectedEndpoint.response.headers["Content-Type"] || ""}
-                        onChange={(e) =>
-                          onUpdateEndpoint({
-                            ...selectedEndpoint,
-                            response: {
-                              ...selectedEndpoint.response,
-                              headers: {
-                                ...selectedEndpoint.response.headers,
-                                "Content-Type": e.target.value,
-                              },
-                            },
-                          })
-                        }
-                        className="border-border/50 dark:border-gray-700 font-mono"
-                      />
-                    </div>
-                  </div>
+          <TabsContent value="endpoint" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Endpoint Configuration</CardTitle>
+                <CardDescription>Configure the basic settings for your mock API endpoint</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Response Body</Label>
-                    <Textarea
-                      value={selectedEndpoint.response.body}
-                      onChange={(e) =>
-                        onUpdateEndpoint({
-                          ...selectedEndpoint,
-                          response: {
-                            ...selectedEndpoint.response,
-                            body: e.target.value,
-                          },
-                        })
-                      }
-                      className="font-mono text-sm border-border/50 dark:border-gray-700"
-                      rows={15}
+                    <Label htmlFor="name">Endpoint Name</Label>
+                    <Input
+                      id="name"
+                      value={endpointForm.name}
+                      onChange={(e) => setEndpointForm((prev) => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g., Get Users"
                     />
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="test" className="h-full m-0 overflow-y-auto">
-              <Card className="border-border/50 dark:border-gray-800/50">
-                <CardHeader>
-                  <CardTitle>Test Endpoint</CardTitle>
-                  <CardDescription>Test your mock endpoint and see the response</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className={`font-mono ${getMethodColor(selectedEndpoint.method)}`}>
-                      {selectedEndpoint.method}
-                    </Badge>
-                    <code className="bg-muted/50 px-3 py-1.5 rounded-md text-sm font-mono border border-border/50 dark:border-gray-700">
-                      {selectedEndpoint.path}
-                    </code>
-                    <Button
-                      onClick={handleTest}
-                      disabled={isLoading}
-                      className="ml-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                  <div className="space-y-2">
+                    <Label htmlFor="method">HTTP Method</Label>
+                    <Select
+                      value={endpointForm.method}
+                      onValueChange={(value) => setEndpointForm((prev) => ({ ...prev, method: value }))}
                     >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GET">GET</SelectItem>
+                        <SelectItem value="POST">POST</SelectItem>
+                        <SelectItem value="PUT">PUT</SelectItem>
+                        <SelectItem value="PATCH">PATCH</SelectItem>
+                        <SelectItem value="DELETE">DELETE</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="path">Path</Label>
+                  <div className="flex items-center space-x-2">
+                    <Badge className={getMethodColor(endpointForm.method)}>{endpointForm.method}</Badge>
+                    <Input
+                      id="path"
+                      value={endpointForm.path}
+                      onChange={(e) => setEndpointForm((prev) => ({ ...prev, path: e.target.value }))}
+                      placeholder="/api/users"
+                      className="flex-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status Code</Label>
+                    <Input
+                      id="status"
+                      type="number"
+                      value={endpointForm.status_code}
+                      onChange={(e) =>
+                        setEndpointForm((prev) => ({ ...prev, status_code: Number.parseInt(e.target.value) }))
+                      }
+                      placeholder="200"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Actions</Label>
+                    <Button onClick={handleTest} variant="outline" className="w-full bg-transparent">
                       <Play className="h-4 w-4 mr-2" />
-                      {isLoading ? "Testing..." : "Send Request"}
+                      Test Endpoint
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-                  {testResponse && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-base font-semibold">Response</Label>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-border/50 dark:border-gray-700 bg-transparent"
-                        >
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copy
-                        </Button>
-                      </div>
-                      <Textarea
-                        value={testResponse}
-                        readOnly
-                        className="font-mono text-sm border-border/50 dark:border-gray-700 bg-muted/30"
-                        rows={15}
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+          <TabsContent value="response" className="space-y-4">
+            <ResponseEditor
+              responseBody={endpointForm.response_body}
+              onResponseChange={(body) => setEndpointForm((prev) => ({ ...prev, response_body: body }))}
+              onTest={handleTest}
+            />
+          </TabsContent>
 
-            <TabsContent value="ai-generate" className="h-full m-0 overflow-y-auto">
-              <AiMockGenerator
-                onGenerateEndpoint={(endpoint) => onAddEndpoint(selectedCollection.id, endpoint)}
-                collectionId={selectedCollection.id}
-              />
-            </TabsContent>
-          </div>
+          <TabsContent value="validation" className="space-y-4">
+            <ValidationEditor
+              validationRules={endpointForm.validation_rules}
+              errorScenarios={endpointForm.error_scenarios}
+              onValidationChange={(rules) => setEndpointForm((prev) => ({ ...prev, validation_rules: rules }))}
+              onErrorScenariosChange={(scenarios) =>
+                setEndpointForm((prev) => ({ ...prev, error_scenarios: scenarios }))
+              }
+            />
+          </TabsContent>
+
+          <TabsContent value="ai-generate" className="space-y-4">
+            <AiMockGenerator
+              collectionId={selectedCollection.id}
+              onGenerate={(generatedData) => {
+                setEndpointForm((prev) => ({
+                  ...prev,
+                  ...generatedData,
+                }))
+                toast.success("AI generated mock data applied!")
+              }}
+            />
+          </TabsContent>
         </Tabs>
-      </main>
-    </div>
+      </div>
+    </SidebarInset>
   )
 }
