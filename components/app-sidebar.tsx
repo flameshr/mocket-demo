@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, Plus, Globe, Zap } from "lucide-react"
+import { ChevronDown, Plus, Globe, Zap, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,10 +15,11 @@ interface AppSidebarProps {
   selectedEndpoint: MockEndpoint | null
   onSelectCollection: (collection: Collection) => void
   onSelectEndpoint: (endpoint: MockEndpoint) => void
-  onAddEndpoint: (collectionId: string, endpoint: MockEndpoint) => void
-  onAddCollection: (collection: Collection) => void
+  onAddEndpoint: (collectionId: string, endpoint: Omit<MockEndpoint, "id">) => void
+  onAddCollection: (collection: Omit<Collection, "id" | "endpoints">) => void
   isOpen: boolean
   onToggle: () => void
+  loading?: boolean
 }
 
 export function AppSidebar({
@@ -30,6 +31,7 @@ export function AppSidebar({
   onAddEndpoint,
   onAddCollection,
   isOpen,
+  loading = false,
 }: AppSidebarProps) {
   const [showAddEndpoint, setShowAddEndpoint] = useState(false)
   const [showAddCollection, setShowAddCollection] = useState(false)
@@ -64,6 +66,7 @@ export function AppSidebar({
             <span className="font-bold text-xl bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               MockAPI
             </span>
+            {loading && <Loader2 className="h-4 w-4 animate-spin ml-auto" />}
           </div>
           <div className="px-4 pb-4">
             <DropdownMenu>
@@ -71,18 +74,24 @@ export function AppSidebar({
                 <Button
                   variant="outline"
                   className="w-full justify-between border-border/50 dark:border-gray-700 hover:bg-muted/50 bg-transparent"
+                  disabled={loading}
                 >
-                  <span className="truncate">{selectedCollection.name}</span>
+                  <span className="truncate">{selectedCollection?.name || "Select Collection"}</span>
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-[280px] border-border/50 dark:border-gray-700">
                 {collections.map((collection) => (
                   <DropdownMenuItem key={collection.id} onClick={() => onSelectCollection(collection)}>
-                    {collection.name}
+                    <div className="flex flex-col">
+                      <span>{collection.name}</span>
+                      {collection.description && (
+                        <span className="text-xs text-muted-foreground">{collection.description}</span>
+                      )}
+                    </div>
                   </DropdownMenuItem>
                 ))}
-                <DropdownMenuItem onClick={() => setShowAddCollection(true)}>
+                <DropdownMenuItem onClick={() => setShowAddCollection(true)} disabled={loading}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Collection
                 </DropdownMenuItem>
@@ -100,12 +109,13 @@ export function AppSidebar({
                 size="sm"
                 onClick={() => setShowAddEndpoint(true)}
                 className="h-6 w-6 p-0 hover:bg-muted/50"
+                disabled={loading || !selectedCollection}
               >
                 <Plus className="h-3 w-3" />
               </Button>
             </div>
             <div className="space-y-1 overflow-y-auto max-h-[calc(100vh-300px)]">
-              {selectedCollection.endpoints.map((endpoint) => (
+              {selectedCollection?.endpoints.map((endpoint) => (
                 <div
                   key={endpoint.id}
                   onClick={() => onSelectEndpoint(endpoint)}
@@ -129,6 +139,14 @@ export function AppSidebar({
                   </div>
                 </div>
               ))}
+
+              {selectedCollection && selectedCollection.endpoints.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Globe className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No endpoints yet</p>
+                  <p className="text-xs">Add your first endpoint to get started</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -146,7 +164,7 @@ export function AppSidebar({
       <AddEndpointDialog
         open={showAddEndpoint}
         onOpenChange={setShowAddEndpoint}
-        onAddEndpoint={(endpoint) => onAddEndpoint(selectedCollection.id, endpoint)}
+        onAddEndpoint={(endpoint) => selectedCollection && onAddEndpoint(selectedCollection.id, endpoint)}
       />
 
       <AddCollectionDialog

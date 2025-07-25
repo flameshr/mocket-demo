@@ -9,17 +9,21 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Play, Save, Copy, Menu } from "lucide-react"
+import { Play, Save, Copy, Menu, Loader2, CheckCircle } from "lucide-react"
 import type { MockEndpoint, Collection } from "./mock-api-platform"
 import { AiMockGenerator } from "./ai-mock-generator"
 import { ThemeToggle } from "./theme-toggle"
+import { ResponseEditor } from "./response-editor"
+import { ValidationEditor } from "./validation-editor"
+import { ValidationProcessor } from "@/lib/validation-processor"
 
 interface MainContentProps {
   selectedEndpoint: MockEndpoint | null
   selectedCollection: Collection
   onUpdateEndpoint: (endpoint: MockEndpoint) => void
-  onAddEndpoint: (collectionId: string, endpoint: MockEndpoint) => void
+  onAddEndpoint: (collectionId: string, endpoint: Omit<MockEndpoint, "id">) => void
   onToggleSidebar: () => void
+  saving?: boolean
 }
 
 export function MainContent({
@@ -28,9 +32,11 @@ export function MainContent({
   onUpdateEndpoint,
   onAddEndpoint,
   onToggleSidebar,
+  saving = false,
 }: MainContentProps) {
   const [testResponse, setTestResponse] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
   if (!selectedEndpoint) {
     return (
@@ -69,6 +75,51 @@ export function MainContent({
 
   const handleTest = async () => {
     setIsLoading(true)
+
+    // Simulate validation for POST/PUT/PATCH requests
+    if (["POST", "PUT", "PATCH"].includes(selectedEndpoint.method) && selectedEndpoint.validation?.enabled) {
+      try {
+        const requestBody = selectedEndpoint.request?.body ? JSON.parse(selectedEndpoint.request.body) : {}
+        const validationResult = ValidationProcessor.validateRequest(requestBody, selectedEndpoint.validation)
+
+        if (!validationResult.isValid) {
+          setTimeout(() => {
+            setTestResponse(
+              JSON.stringify(
+                {
+                  status: validationResult.statusCode,
+                  headers: { "Content-Type": "application/json" },
+                  body: validationResult.response,
+                },
+                null,
+                2,
+              ),
+            )
+            setIsLoading(false)
+          }, 1000)
+          return
+        }
+      } catch (error) {
+        // Invalid JSON in request body
+        setTimeout(() => {
+          setTestResponse(
+            JSON.stringify(
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+                body: { error: "Invalid JSON in request body", code: "INVALID_JSON" },
+              },
+              null,
+              2,
+            ),
+          )
+          setIsLoading(false)
+        }, 1000)
+        return
+      }
+    }
+
+    // Original test logic for successful responses
     setTimeout(() => {
       setTestResponse(
         JSON.stringify(
@@ -83,6 +134,11 @@ export function MainContent({
       )
       setIsLoading(false)
     }, 1000)
+  }
+
+  const handleSave = () => {
+    onUpdateEndpoint(selectedEndpoint)
+    setLastSaved(new Date())
   }
 
   const getMethodColor = (method: string) => {
@@ -123,19 +179,34 @@ export function MainContent({
             <Play className="h-4 w-4 mr-2" />
             {isLoading ? "Testing..." : "Test"}
           </Button>
-          <Button variant="outline" className="border-border/50 dark:border-gray-700 bg-transparent">
-            <Save className="h-4 w-4 mr-2" />
-            Save
+          <Button
+            variant="outline"
+            className="border-border/50 dark:border-gray-700 bg-transparent"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : lastSaved ? (
+              <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            {saving ? "Saving..." : lastSaved ? "Saved" : "Save"}
           </Button>
+          {lastSaved && <span className="text-xs text-muted-foreground">{lastSaved.toLocaleTimeString()}</span>}
           <ThemeToggle />
         </div>
       </header>
 
       <main className="flex-1 p-6 overflow-hidden">
         <Tabs defaultValue="endpoint" className="h-full flex flex-col">
-          <TabsList className="grid w-full grid-cols-4 shrink-0 bg-muted/30 border border-border/50 dark:border-gray-800/50">
+          <TabsList className="grid w-full grid-cols-5 shrink-0 bg-muted/30 border border-border/50 dark:border-gray-800/50">
             <TabsTrigger value="endpoint" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
               Endpoint
+            </TabsTrigger>
+            <TabsTrigger value="validation" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              Validation
             </TabsTrigger>
             <TabsTrigger value="response" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
               Response
@@ -260,71 +331,40 @@ export function MainContent({
               </div>
             </TabsContent>
 
+            <TabsContent value="validation" className="h-full m-0 overflow-y-auto">
+              <ValidationEditor
+                config={
+                  selectedEndpoint.validation || {
+                    enabled: false,
+                    rules: [],
+                    errorScenarios: [],
+                    strictMode: false,
+                  }
+                }
+                onConfigChange={(validation) =>
+                  onUpdateEndpoint({
+                    ...selectedEndpoint,
+                    validation,
+                  })
+                }
+                method={selectedEndpoint.method}
+              />
+            </TabsContent>
+
             <TabsContent value="response" className="h-full m-0 overflow-y-auto">
-              <Card className="border-border/50 dark:border-gray-800/50">
-                <CardHeader>
-                  <CardTitle>Response Configuration</CardTitle>
-                  <CardDescription>Configure the mock response for this endpoint</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="status">Status Code</Label>
-                      <Input
-                        id="status"
-                        type="number"
-                        value={selectedEndpoint.response.status}
-                        onChange={(e) =>
-                          onUpdateEndpoint({
-                            ...selectedEndpoint,
-                            response: {
-                              ...selectedEndpoint.response,
-                              status: Number.parseInt(e.target.value),
-                            },
-                          })
-                        }
-                        className="border-border/50 dark:border-gray-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Content Type</Label>
-                      <Input
-                        value={selectedEndpoint.response.headers["Content-Type"] || ""}
-                        onChange={(e) =>
-                          onUpdateEndpoint({
-                            ...selectedEndpoint,
-                            response: {
-                              ...selectedEndpoint.response,
-                              headers: {
-                                ...selectedEndpoint.response.headers,
-                                "Content-Type": e.target.value,
-                              },
-                            },
-                          })
-                        }
-                        className="border-border/50 dark:border-gray-700 font-mono"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Response Body</Label>
-                    <Textarea
-                      value={selectedEndpoint.response.body}
-                      onChange={(e) =>
-                        onUpdateEndpoint({
-                          ...selectedEndpoint,
-                          response: {
-                            ...selectedEndpoint.response,
-                            body: e.target.value,
-                          },
-                        })
-                      }
-                      className="font-mono text-sm border-border/50 dark:border-gray-700"
-                      rows={15}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+              <ResponseEditor
+                responseBody={selectedEndpoint.response.body}
+                onResponseChange={(body) =>
+                  onUpdateEndpoint({
+                    ...selectedEndpoint,
+                    response: {
+                      ...selectedEndpoint.response,
+                      body: body,
+                    },
+                  })
+                }
+                onTest={handleTest}
+              />
             </TabsContent>
 
             <TabsContent value="test" className="h-full m-0 overflow-y-auto">
